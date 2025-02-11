@@ -66,7 +66,7 @@ class GeoDataset:
             log_message(f"Error parsing RunInfo file {runinfo_file}: {e}", level="ERROR")
             return None
 
-    def process_single_accession(self, accession):
+    def process_single_accession(self, accession, base_dir):
         log_message(f"Processing GEO accession: {accession}")
         output_dir = self.create_geo_directory(accession)  # Create the GEO accession directory directly
 
