@@ -1,10 +1,10 @@
 import os
 import subprocess
 import sys
-import pandas as pd  # Added missing import
+import pandas as pd
 import logging
 import shutil
-from utils import log_message,create_directory
+from utils import log_message, create_directory
 
 # Setup logging to a single aggregated log file
 log_file = "srrconvert.log"
@@ -16,19 +16,19 @@ logging.basicConfig(
 )
 
 class SRRConvert:
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str, max_retries: int = 3):
         """
         Initialize the SRRConvert class with the base directory for GEO accessions.
         """
         self.base_dir = base_dir
-        self.max_retries = 3
+        self.max_retries = max_retries
 
         # Check if fasterq-dump is installed
         if not shutil.which("fasterq-dump"):
             log_message("Error: fasterq-dump is not installed. Please install it before running this script.", level="ERROR")
             raise FileNotFoundError("fasterq-dump not found in system PATH.")
 
-    def convert_srr_to_fastq(self, srr_ids, accession):
+    def convert_srr_to_fastq(self, srr_ids: list, accession: str) -> None:
         """
         Convert downloaded SRA files to FASTQ format.
         """
@@ -74,7 +74,12 @@ class SRRConvert:
                 os.rename(fastq_1, single_fastq)
                 log_message(f"Converted {srr_id} as SINGLE-END.", level="INFO")
 
-    def _log_and_print(self, message, level="INFO"):
+    def read_geo_accessions(self, file_path: str) -> list:
+        """Read GEO accessions from a .txt file."""
+        with open(file_path, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def _log_and_print(self, message: str, level: str = "INFO") -> None:
         """
         Logs message to both the console and an aggregated log file.
         """
@@ -95,10 +100,9 @@ if __name__ == "__main__":
     geo_accessions_file = sys.argv[1]
     base_dir = sys.argv[2]
 
-    with open(geo_accessions_file, "r") as f:
-        geo_accessions = [line.strip() for line in f if line.strip()]
-    
     srr_converter = SRRConvert(base_dir)
+    
+    geo_accessions = srr_converter.read_geo_accessions(geo_accessions_file)
     
     for accession in geo_accessions:
         srr_csv_path = os.path.join(base_dir, accession, f"{accession}_SRR.csv")
