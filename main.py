@@ -11,19 +11,23 @@ from utils import log_message, create_directory
 # Configure logging globally
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def main(geo_accessions_file, base_dir="output"):
+def read_geo_accessions(file_path: str) -> list:
+    """Read GEO accessions from a file."""
+    with open(file_path, "r") as f:
+        return [line.strip() for line in f if line.strip()]
+
+def main(geo_accessions_file: str, base_dir: str = "output") -> None:
     """
     Orchestrates the full omics data processing pipeline.
     """
     log_message("Starting full GEO dataset processing pipeline.")
 
     # Read GEO accessions
-    with open(geo_accessions_file, "r") as f:
-        geo_accessions = [line.strip() for line in f if line.strip()]
+    geo_accessions = read_geo_accessions(geo_accessions_file)
 
     # Initialize components
     geo_dataset = GeoDataset(geo_accessions)
-    srr_downloader = SRRDownload()
+    srr_downloader = SRRDownload(base_dir)
     srr_converter = SRRConvert(base_dir)
     star_aligner = STARAligner(base_dir)
 

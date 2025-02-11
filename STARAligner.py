@@ -4,7 +4,7 @@ import pandas as pd
 from utils import log_message, create_directory
 
 class STARAligner:
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str):
         """
         Initialize STARAligner with base directory and predefined genome mappings.
         """
@@ -14,7 +14,7 @@ class STARAligner:
             "Mus musculus": "/nfs/turbo/umms-sihogan/crizza/STAR_INDEX/GRCm39"
         }
 
-    def align_reads(self, accession):
+    def align_reads(self, accession: str) -> None:
         """
         Perform alignment for a given GEO accession using STAR.
         """
@@ -53,7 +53,7 @@ class STARAligner:
             output_prefix = os.path.join(align_dir, srr_id)
             self.run_star(fastq_files, genome_dir, output_prefix, layout)
 
-    def get_fastq_files(self, srr_dir, srr_id, layout):
+    def get_fastq_files(self, srr_dir: str, srr_id: str, layout: str) -> list:
         """
         Retrieve FASTQ file paths based on read layout.
         """
@@ -65,7 +65,7 @@ class STARAligner:
             fastq = os.path.join(srr_dir, f"{srr_id}.fastq")
             return [fastq] if os.path.exists(fastq) else None
 
-    def run_star(self, fastq_files, genome_dir, output_prefix, layout):
+    def run_star(self, fastq_files: list, genome_dir: str, output_prefix: str, layout: str) -> None:
         """
         Run STAR alignment.
         """
@@ -89,6 +89,11 @@ class STARAligner:
             except subprocess.CalledProcessError as e:
                 log_message(f"Error in STAR alignment: {e}", level="ERROR")
 
+    def read_geo_accessions(self, file_path: str) -> list:
+        """Read GEO accessions from a file."""
+        with open(file_path, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
@@ -99,9 +104,8 @@ if __name__ == "__main__":
     geo_accessions_file = sys.argv[1]
     
     # Read GEO accessions
-    with open(geo_accessions_file, "r") as f:
-        geo_accessions = [line.strip() for line in f if line.strip()]
-    
     aligner = STARAligner("output")
+    geo_accessions = aligner.read_geo_accessions(geo_accessions_file)
+    
     for accession in geo_accessions:
         aligner.align_reads(accession)

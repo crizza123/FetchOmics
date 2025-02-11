@@ -4,13 +4,13 @@ import sys
 from utils import log_message, create_directory
 
 class SRRDownload:
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str):
         """
         Initialize the SRRDownload class with a base directory.
         """
         self.base_dir = base_dir
 
-    def download_srrs(self, srr_ids, geo_dir):
+    def download_srrs(self, srr_ids: list, geo_dir: str) -> None:
         """
         Download SRR files using prefetch.
         """
@@ -30,9 +30,29 @@ class SRRDownload:
                 self._log_and_print(f"Error downloading {srr_id}: {e}", level="ERROR")
                 continue
 
-    def _log_and_print(self, message, level="INFO"):
+    def _log_and_print(self, message: str, level: str = "INFO") -> None:
         """
         Logs message and prints to stdout immediately for real-time SLURM visibility.
         """
         log_message(message, level)
         print(message, flush=True)
+
+    def read_srr_ids(self, file_path: str) -> list:
+        """Read SRR IDs from a file."""
+        with open(file_path, "r") as f:
+            return [line.strip() for line in f if line.strip()]
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python SRRDownload.py <srr_ids_file> <base_dir>")
+        sys.exit(1)
+    
+    srr_ids_file = sys.argv[1]
+    base_dir = sys.argv[2]
+
+    srr_downloader = SRRDownload(base_dir)
+    
+    srr_ids = srr_downloader.read_srr_ids(srr_ids_file)
+    
+    geo_dir = "your_geo_directory"  # Replace with actual geo directory path
+    srr_downloader.download_srrs(srr_ids, geo_dir)
