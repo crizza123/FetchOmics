@@ -24,26 +24,6 @@ class GeoDataset:
         self.metadata_summary = []
         self.srr_list = []
 
-
-# Example usage
-if __name__ == "__main__":
-    # Path to your .txt file
-    file_path = 'geo_acessions.txt'
-    
-    # Read accessions from the file
-    geo_accessions = read_geo_accessions(file_path)
-    
-    # Create an instance of GeoDataset
-    geo_dataset = GeoDataset(geo_accessions)
-    
-    # Process all accessions
-    results = geo_dataset.process_all()
-    
-    # Print results
-    print(results)
-
-
-
     def parse_runinfo(self, runinfo_file, geo_dir):
         try:
             df = pd.read_csv(runinfo_file)
@@ -138,5 +118,22 @@ if __name__ == "__main__":
         log_message("Finished batch processing.")
         return self.results
 
-    def add_metadata(self, metadata, meatadata_name):
-      self.metadata_name = metadata
+    def add_metadata(self, metadata, metadata_name):  # Corrected parameter name
+        self.metadata_name = metadata
+
+# Example usage
+if __name__ == "__main__":
+    # Path to your .txt file
+    file_path = '/nfs/turbo/umms-sihogan/crizza/geo_accessions.txt'
+    
+    # Read accessions from the file
+    geo_accessions = read_geo_accessions(file_path)
+    
+    # Create an instance of GeoDataset
+    geo_dataset = GeoDataset(geo_accessions)
+    
+    # Process all accessions
+    results = geo_dataset.process_all()
+    
+    # Print results
+    print(results)
