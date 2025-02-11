@@ -124,7 +124,7 @@ class GeoDataset:
 # Example usage
 if __name__ == "__main__":
     # Path to your .txt file
-    file_path = '/nfs/turbo/umms-sihogan/crizza/geo_accessions.txt'
+    file_path = '/nfs/turbo/umms-sihogan/crizza/FetchOmics/geo_accessions.txt'
     
     # Read accessions from the file
     geo_accessions = read_geo_accessions(file_path)
