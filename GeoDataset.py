@@ -24,6 +24,13 @@ class GeoDataset:
         self.metadata_summary = []
         self.srr_list = []
 
+    def create_geo_directory(self, accession):
+
+        """Create a directory for the GEO accession in the current working directory."""
+        geo_directory = accession  # Use the accession as the directory name
+        os.makedirs(geo_directory, exist_ok=True)  # Create the directory if it doesn't exist
+        return geo_directory
+
     def parse_runinfo(self, runinfo_file, geo_dir):
         try:
             df = pd.read_csv(runinfo_file)
@@ -31,6 +38,7 @@ class GeoDataset:
                 log_message(f"RunInfo file {runinfo_file} is empty.", level="WARNING")
                 return None
 
+            # Extract metadata
             species = df["ScientificName"].unique().tolist() if "ScientificName" in df.columns else []
             library_strategy = df["LibraryStrategy"].unique().tolist() if "LibraryStrategy" in df.columns else []
             library_layout = df["LibraryLayout"].unique().tolist() if "LibraryLayout" in df.columns else []
@@ -38,7 +46,8 @@ class GeoDataset:
             model = df["Model"].unique().tolist() if "Model" in df.columns else []
             runs = df["Run"].tolist() if "Run" in df.columns else []
 
-            srr_file = os.path.join(geo_dir, f"{geo_dir}_SRR.csv")
+            # Save SRR file directly in the geo_dir
+            srr_file = os.path.join(geo_dir, f"{geo_dir.split('/')[-1]}_SRR.csv")  # Use the last part of geo_dir for the filename
             srr_df = pd.DataFrame({"Run": runs})
             srr_df.to_csv(srr_file, index=False, header=True)
             log_message(f"SRR list saved to {srr_file}")
@@ -57,9 +66,9 @@ class GeoDataset:
             log_message(f"Error parsing RunInfo file {runinfo_file}: {e}", level="ERROR")
             return None
 
-    def process_single_accession(self, accession, base_dir="output"):
+    def process_single_accession(self, accession):
         log_message(f"Processing GEO accession: {accession}")
-        geo_dir = create_directory(os.path.join(base_dir, accession))
+        output_dir = self.create_geo_directory(accession)  # Create the GEO accession directory directly
 
         gds_id = fetch_numeric_id(accession, email=self.email, tool=self.tool, api_key=self.api_key)
         if not gds_id:
@@ -67,21 +76,21 @@ class GeoDataset:
             return {
                 "accession": accession,
                 "gds_id": None,
-                "geo_directory": geo_dir,
+                "geo_directory": output_dir,
                 "metadata": None,
             }
 
-        runinfo_file = fetch_runinfo(gds_id, output_dir=geo_dir)
+        runinfo_file = fetch_runinfo(gds_id, output_dir=output_dir)  # Save in the GEO accession directory
         if not runinfo_file:
             log_message(f"RunInfo file not found for GEO accession: {accession}", level="ERROR")
             return {
                 "accession": accession,
                 "gds_id": gds_id,
-                "geo_directory": geo_dir,
+                "geo_directory": output_dir,
                 "metadata": None,
             }
 
-        metadata = self.parse_runinfo(runinfo_file, geo_dir)
+        metadata = self.parse_runinfo(runinfo_file, output_dir)  # Save metadata in the GEO accession directory
         if metadata:
             for run in metadata["runs"]:
                 self.metadata_summary.append({
@@ -98,11 +107,12 @@ class GeoDataset:
         result = {
             "accession": accession,
             "gds_id": gds_id,
-            "geo_directory": geo_dir,
+            "geo_directory": output_dir,
             "metadata": metadata,
         }
         log_message(f"Finished processing GEO accession: {accession}")
         return result
+
 
     def process_all(self, base_dir="output", summary_csv="metadata_summary.csv"):
         log_message(f"Starting batch processing of {len(self.geo_accessions)} GEO accessions.")
@@ -118,7 +128,7 @@ class GeoDataset:
         log_message("Finished batch processing.")
         return self.results
 
-    def add_metadata(self, metadata, metadata_name):  # Corrected parameter name
+    def add_metadata(self, metadata, metadata_name):
         self.metadata_name = metadata
 
 # Example usage
