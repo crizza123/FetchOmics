@@ -1,173 +1,69 @@
 import os
-
+import sys
+import logging
 import pandas as pd
-
 from GeoDataset import GeoDataset
-
 from SRRDownload import SRRDownload
-
 from SRRConvert import SRRConvert
+from STARAligner import STARAligner
+from utils import log_message, create_directory
 
-from utils import log_message
+# Configure logging globally
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-
-
-def main(geo_accessions_file, base_dir="output", summary_csv="metadata_summary.csv"):
-
+def main(geo_accessions_file, base_dir="output"):
     """
-
-    Main function to process GEO accessions, download SRRs, and convert them to FASTQ.
-
+    Orchestrates the full omics data processing pipeline.
     """
+    log_message("Starting full GEO dataset processing pipeline.")
 
-    log_message("Starting GEO dataset processing pipeline.")
-
-
-
-    # Read GEO accessions from file
-
+    # Read GEO accessions
     with open(geo_accessions_file, "r") as f:
-
         geo_accessions = [line.strip() for line in f if line.strip()]
 
-    
-
-    # Initialize GeoDataset
-
+    # Initialize components
     geo_dataset = GeoDataset(geo_accessions)
-
-    geo_results = geo_dataset.process_all(base_dir, summary_csv)
-
-    
-
-    # Initialize SRRDownload
-
     srr_downloader = SRRDownload()
+    srr_converter = SRRConvert(base_dir)
+    star_aligner = STARAligner(base_dir)
 
-    
+    # Process each GEO accession
+    for accession in geo_accessions:
+        log_message(f"Processing GEO accession: {accession}")
 
-    for result in geo_results:
+        # Create directory for accession
+        geo_dir = create_directory(os.path.join(base_dir, accession))
 
-        accession = result["accession"]
-
-        geo_dir = result["geo_directory"]
-
-        gds_id = result["gds_id"]
-
-        
-
-        if not gds_id:
-
-            log_message(f"Skipping {accession} due to missing GDS ID.", level="WARNING")
-
+        # Fetch metadata
+        results = geo_dataset.process_single_accession(accession, base_dir)
+        if not results["metadata"]:
+            log_message(f"Skipping {accession} due to missing metadata.", level="WARNING")
             continue
 
-        
-
-        srr_csv_path = os.path.join(geo_dir, "SRR.csv")
-
-        runinfo_path = os.path.join(geo_dir, f"{gds_id}_SRA_RunInfo.csv")
-
-        
-
-        if not os.path.exists(srr_csv_path) or not os.path.exists(runinfo_path):
-
-            log_message(f"Skipping {accession}, missing required files.", level="WARNING")
-
+        # Get SRR list from metadata
+        srr_csv_path = os.path.join(geo_dir, f"{accession}_SRR.csv")
+        if not os.path.exists(srr_csv_path):
+            log_message(f"Skipping {accession}, missing SRR file.", level="WARNING")
             continue
 
-        
+        srr_df = pd.read_csv(srr_csv_path)
+        srr_ids = srr_df["Run"].tolist()
 
-        # Read SRR IDs and library layout
-
-        try:
-
-            srr_df = pd.read_csv(srr_csv_path)
-
-            srr_ids = srr_df["Run"].tolist()
-
-            runinfo_df = pd.read_csv(runinfo_path)
-
-            layout_map = {row["Run"]: row.get("LibraryLayout", "SINGLE") for _, row in runinfo_df.iterrows() if "Run" in row}
-
-        except Exception as e:
-
-            log_message(f"Error reading metadata for {accession}: {e}", level="ERROR")
-
-            continue
-
-        
-
-        # Download SRRs
-
+        # Download SRR files
         srr_downloader.download_srrs(srr_ids, geo_dir)
 
-    
+        # Convert SRR files to FASTQ
+        srr_converter.convert_srr_to_fastq(srr_ids, accession)
 
-    # Convert SRRs to FASTQ
+        # Align reads using STAR
+        star_aligner.align_reads(accession)
 
-    srr_converter = SRRConvert()
-
-    for result in geo_results:
-
-        accession = result["accession"]
-
-        geo_dir = result["geo_directory"]
-
-        gds_id = result["gds_id"]
-
-        
-
-        if not gds_id:
-
-            continue
-
-        
-
-        runinfo_path = os.path.join(geo_dir, f"{gds_id}_SRA_RunInfo.csv")
-
-        if not os.path.exists(runinfo_path):
-
-            continue
-
-        
-
-        try:
-
-            runinfo_df = pd.read_csv(runinfo_path)
-
-            layout_map = {row["Run"]: row.get("LibraryLayout", "SINGLE") for _, row in runinfo_df.iterrows() if "Run" in row}
-
-        except Exception as e:
-
-            log_message(f"Error reading runinfo for {accession}: {e}", level="ERROR")
-
-            continue
-
-        
-
-        srr_converter.convert_srr_to_fastq(srr_ids, geo_dir, layout_map)
-
-    
-
-    log_message("Finished GEO dataset processing pipeline.")
-
-
+    log_message("Pipeline completed successfully.")
 
 if __name__ == "__main__":
-
-    import sys
-
     if len(sys.argv) != 2:
-
         print("Usage: python main.py <geo_accessions_file>")
-
         sys.exit(1)
 
-    
-
     geo_accessions_file = sys.argv[1]
-
     main(geo_accessions_file)
-
-
