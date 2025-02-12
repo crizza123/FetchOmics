@@ -1,7 +1,7 @@
 import os
 import subprocess
 import sys
-from utils import log_message, create_directory
+from utils import log_message, create_directory, fetch_runinfo
 
 class SRRDownload:
     def __init__(self, base_dir: str):
@@ -17,18 +17,39 @@ class SRRDownload:
         for srr_id in srr_ids:
             self._log_and_print(f"Fetching SRR {srr_id}...")
             srr_output_dir = create_directory(os.path.join(geo_dir, srr_id))
+            sra_file = os.path.join(srr_output_dir, f"{srr_id}.sra")
+            srr_csv_file = os.path.join(geo_dir, f"{geo_dir.split('/')[-1]}_SRR.csv")  # Adjust path as needed
 
-            try:
-                prefetch_command = ["prefetch", srr_id, "-O", srr_output_dir]
-                subprocess.run(prefetch_command, check=True, text=True, stdout=sys.stdout, stderr=sys.stderr)
-                self._log_and_print(f"Successfully fetched {srr_id}.")
-
-                sra_file = os.path.join(srr_output_dir, f"{srr_id}.sra")
-                if not os.path.exists(sra_file):
-                    self._log_and_print(f"Error: SRA file {sra_file} not found. Skipping {srr_id}.", level="ERROR")
-            except subprocess.CalledProcessError as e:
-                self._log_and_print(f"Error downloading {srr_id}: {e}", level="ERROR")
+            # Check if the SRR CSV file exists
+            if os.path.exists(srr_csv_file):
+                self._log_and_print(f"Skipping run info download for {srr_id}, {srr_csv_file} already exists.")
                 continue
+
+            # If the SRA file exists but the SRR CSV does not, fetch the run info
+            if os.path.exists(sra_file):
+                self._log_and_print(f"Building SRR list from metadata for {srr_id}...")
+                gds_id = self.extract_gds_id(srr_id)  # Implement this method to extract GDS ID from SRR ID
+                runinfo_file = fetch_runinfo(gds_id, geo_dir)  # Fetch run info
+                srr_ids = self.extract_srr_ids_from_runinfo(runinfo_file)  # Implement this method to extract SRR IDs
+            else:
+                # Download the SRR file if it doesn't exist
+                try:
+                    prefetch_command = ["prefetch", srr_id, "-O", srr_output_dir]
+                    subprocess.run(prefetch_command, check=True, text=True, stdout=sys.stdout, stderr=sys.stderr)
+                    self._log_and_print(f"Successfully fetched {srr_id}.")
+                except subprocess.CalledProcessError as e:
+                    self._log_and_print(f"Error downloading {srr_id}: {e}", level="ERROR")
+                    continue
+
+    def extract_gds_id(self, srr_id: str) -> str:
+        """Extract GDS ID from the SRR ID (implement this based on your logic)."""
+        # Placeholder for actual implementation
+        return "GDS_ID"
+
+    def extract_srr_ids_from_runinfo(self, runinfo_file: str) -> list:
+        """Extract SRR IDs from the run info file."""
+        # Implement logic to read the run info file and extract SRR IDs
+        return []
 
     def _log_and_print(self, message: str, level: str = "INFO") -> None:
         """
