@@ -39,20 +39,20 @@ class SRRConvert:
             return
 
         for srr_id in srr_ids:
-            srr_output_dir = create_directory(os.path.join(geo_dir, srr_id))
-            sra_file = os.path.join(srr_output_dir, f"{srr_id}.sra")
+            nested_sra_dir = os.path.join(geo_dir, srr_id)  # Adjusted for nested structure
+            sra_file = os.path.join(nested_sra_dir, f"{srr_id}.sra")  # Correct path to SRA file
 
             # Check for existing FASTQ files
-            fastq_1 = os.path.join(srr_output_dir, f"{srr_id}_1.fastq")
-            fastq_2 = os.path.join(srr_output_dir, f"{srr_id}_2.fastq")
-            single_fastq = os.path.join(srr_output_dir, f"{srr_id}.fastq")
+            fastq_1 = os.path.join(nested_sra_dir, f"{srr_id}_1.fastq")
+            fastq_2 = os.path.join(nested_sra_dir, f"{srr_id}_2.fastq")
+            single_fastq = os.path.join(nested_sra_dir, f"{srr_id}.fastq")
 
             if os.path.exists(single_fastq) or os.path.exists(fastq_1):
                 log_message(f"Skipping conversion for {srr_id}, FASTQ files already exist.", level="INFO")
                 continue
 
             if not os.path.exists(sra_file):
-                log_message(f"Skipping {srr_id}, no SRA file found in {srr_output_dir}.", level="ERROR")
+                log_message(f"Skipping {srr_id}, no SRA file found in {nested_sra_dir}.", level="ERROR")
                 continue
 
             log_message(f"Converting {srr_id} to FASTQ...")
@@ -60,7 +60,7 @@ class SRRConvert:
             # Retry logic for conversion failures
             for attempt in range(1, self.max_retries + 1):
                 try:
-                    fasterq_command = ["fasterq-dump", "--split-files", sra_file, "-O", srr_output_dir]
+                    fasterq_command = ["fasterq-dump", "--split-files", sra_file, "-O", nested_sra_dir]
                     subprocess.run(fasterq_command, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                     # Verify that at least one FASTQ file was created
