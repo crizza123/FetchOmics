@@ -19,5 +19,8 @@ module load python/3.12.1
 BASE_DIR="/nfs/turbo/umms-sihogan/crizza"
 GEO_ACCESSIONS_FILE="$BASE_DIR/FetchOmics/geo_accessions.txt"
 
-# Run SRRDownload
-python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRDownload.py "$GEO_ACCESSIONS_FILE" "$BASE_DIR" >> "$BASE_DIR/FetchOmics/srr_download.log" 2>&1
+# Read GEO directories from the file
+GEO_DIRS=$(cat "$GEO_ACCESSIONS_FILE")
+
+# Run SRRDownload with the base directory and GEO directories
+python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRDownload.py "$BASE_DIR" $GEO_DIRS >> "$BASE_DIR/FetchOmics/srr_download.log" 2>&1
