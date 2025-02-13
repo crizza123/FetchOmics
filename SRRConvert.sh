@@ -19,5 +19,20 @@ module load python/3.12.1
 BASE_DIR="/nfs/turbo/umms-sihogan/crizza"
 GEO_ACCESSIONS_FILE="$BASE_DIR/FetchOmics/geo_accessions.txt"
 
-# Run SRRConvert
-python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py "$GEO_ACCESSIONS_FILE" "$BASE_DIR" >> "$BASE_DIR/FetchOmics/srr_convert.log" 2>&1
+# Run SRRConvert for each GSE ID listed in the GEO_ACCESSIONS_FILE
+while IFS= read -r GSE_ID; do
+    echo "Processing GSE ID: $GSE_ID"
+    python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py \
+        --base_dir "$BASE_DIR/FetchOmics" \
+        --output_dir "$BASE_DIR/FetchOmics/$GSE_ID" \
+        --gse_list "$GSE_ID" >> "$BASE_DIR/FetchOmics/srr_convert.log" 2>&1
+
+    # Check if the command was successful
+    if [ $? -eq 0 ]; then
+        echo "Successfully processed $GSE_ID."
+    else
+        echo "Failed to process $GSE_ID."
+    fi
+done < "$GEO_ACCESSIONS_FILE"
+
+echo "SRR conversion process completed."
