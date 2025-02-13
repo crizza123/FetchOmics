@@ -2,17 +2,21 @@
 """
 SRRConvert.py
 
-This script processes SRR CSV files for each specified GSE id. It reads the CSV file,
-which is expected to be located in a subdirectory under the base directory (i.e.,
-<base_dir>/<GSE_ID>/<GSE_ID>_SRR.csv). For each SRR id in the CSV, the script runs an external
-conversion command (e.g., fasterq-dump).
+This script processes compressed .sra files for each specified GSE id.
+For each GSE directory under <base_dir>/<GSE_ID>/, it finds all files ending with .sra 
+and converts them into fastq files using the SRA Toolkit's fasterq-dump utility.
 
+Key Notes:
+    - The fasterq-dump utility can convert compressed .sra files directly into fastq format.
+      For paired-end reads, the '--split-files' option is used to generate separate FASTQ files.
+    - If the .sra file contains paired-end data, this will produce two files (e.g., sample_1.fastq and sample_2.fastq).
+    
 Usage:
-    python SRRConvert.py --base_dir /path/to/base --gse_list GSE113046 GSE106973 ...
+    python SRRConvert.py --base_dir /path/to/FetchOmics --gse_list GSE113046 GSE106973 --output_dir /path/to/output
 """
 
 import os
-import csv
+import glob
 import logging
 import argparse
 import subprocess
@@ -20,7 +24,7 @@ from typing import List
 
 def setup_logging() -> None:
     """
-    Configure the logging format and level.
+    Configure logging format and level.
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -32,10 +36,10 @@ def parse_arguments() -> argparse.Namespace:
     Parse command-line arguments.
 
     Returns:
-        An argparse.Namespace object with the parsed arguments.
+        argparse.Namespace: The parsed arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Process SRR CSV files located in GSE-specific subdirectories."
+        description="Convert compressed .sra files to fastq format using fasterq-dump with split-files option."
     )
     parser.add_argument(
         "--base_dir",
@@ -48,78 +52,82 @@ def parse_arguments() -> argparse.Namespace:
         nargs="+",
         help="List of GSE IDs to process (e.g., GSE113046 GSE106973)."
     )
+    parser.add_argument(
+        "--output_dir",
+        required=True,
+        help="Directory where the converted fastq files will be saved."
+    )
     return parser.parse_args()
 
-def process_srr_file(csv_file: str, output_dir: str) -> None:
+def convert_sra_to_fastq(sra_file: str, output_dir: str) -> None:
     """
-    Process a single SRR CSV file by reading each SRR id and running a conversion command.
+    Convert a single .sra file into fastq format using fasterq-dump with the --split-files option.
 
     Args:
-        csv_file (str): Full path to the SRR CSV file.
-        output_dir (str): Directory where the converted files will be saved.
+        sra_file (str): Path to the .sra file.
+        output_dir (str): Directory where the output fastq file(s) will be saved.
     """
+    # Extract the SRR id from the filename (assumes file is named like SRRxxxxxxx.sra)
+    srr_id = os.path.basename(sra_file).rsplit('.', 1)[0]
+    logging.info(f"Processing SRR id '{srr_id}' from file: {sra_file}")
+
+    # Build the fasterq-dump command with --split-files.
+    command = ['fasterq-dump', sra_file, '--split-files', '-O', output_dir]
+
     try:
-        with open(csv_file, 'r') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                # Skip empty rows.
-                if not row:
-                    continue
+        result = subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        logging.info(f"Conversion output for {srr_id}:\n{result.stdout}")
+        if result.stderr:
+            logging.warning(f"Conversion warnings for {srr_id}:\n{result.stderr}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error processing {srr_id}:\n{e.stderr}")
 
-                srr_id = row[0].strip()  # Assuming the first column contains the SRR id.
-                logging.info(f"Processing SRR id '{srr_id}' from file: {csv_file}")
-
-                try:
-                    # Run the conversion command (adjust the command as needed)
-                    result = subprocess.run(
-                        ['fasterq-dump', srr_id, '-O', output_dir],
-                        check=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True
-                    )
-                    logging.info(f"Conversion output for {srr_id}:\n{result.stdout}")
-                except subprocess.CalledProcessError as e:
-                    logging.error(f"Error processing {srr_id}:\n{e.stderr}")
-    except Exception as e:
-        logging.error(f"Failed to process file '{csv_file}': {str(e)}")
-
-def process_gse(gse_id: str, base_dir: str, output_dir: str) -> None:
+def process_gse_directory(gse_id: str, base_dir: str, output_dir: str) -> None:
     """
-    Process a single GSE id by locating its corresponding SRR CSV file and processing it.
+    Process a single GSE directory by converting all .sra files found within it.
 
     Args:
-        gse_id (str): GEO series id (e.g., 'GSE113046').
-        base_dir (str): Base directory containing GSE-specific subdirectories.
-        output_dir (str): Directory where output files will be saved.
+        gse_id (str): GEO series ID (e.g., 'GSE113046').
+        base_dir (str): Base directory where GSE directories are located.
+        output_dir (str): Directory where converted fastq files will be saved.
     """
-    # Construct the expected CSV file path:
-    csv_file = os.path.join(base_dir, gse_id, f"{gse_id}_SRR.csv")
-    if not os.path.exists(csv_file):
-        logging.warning(f"Skipping {gse_id}: missing file {csv_file}")
+    gse_dir = os.path.join(base_dir, gse_id)
+    if not os.path.isdir(gse_dir):
+        logging.warning(f"GSE directory not found: {gse_dir}")
         return
 
-    logging.info(f"Found CSV file for {gse_id}: {csv_file}. Beginning processing.")
-    process_srr_file(csv_file, output_dir)
+    # Find all .sra files in the GSE directory.
+    sra_files = glob.glob(os.path.join(gse_dir, "*.sra"))
+    if not sra_files:
+        logging.warning(f"No .sra files found in directory: {gse_dir}")
+        return
+
+    logging.info(f"Found {len(sra_files)} .sra file(s) in {gse_dir}. Beginning conversion.")
+    for sra_file in sra_files:
+        convert_sra_to_fastq(sra_file, output_dir)
 
 def main() -> None:
     """
-    Main function: parses arguments, then processes each provided GSE id.
+    Main function to parse arguments and process each GSE directory.
     """
     setup_logging()
     args = parse_arguments()
 
-    # Define an output directory for converted files.
-    # You can modify this as needed or add an additional argument.
-    output_dir = "./output"
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        logging.info(f"Created output directory: {output_dir}")
+    # Ensure the output directory exists.
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir, exist_ok=True)
+        logging.info(f"Created output directory: {args.output_dir}")
 
-    # Process each GSE id in the provided list.
-    for gse in args.gse_list:
-        logging.info(f"Starting processing for {gse}")
-        process_gse(gse, args.base_dir, output_dir)
+    # Process each specified GSE.
+    for gse_id in args.gse_list:
+        logging.info(f"Starting processing for {gse_id}")
+        process_gse_directory(gse_id, args.base_dir, args.output_dir)
 
 if __name__ == '__main__':
     main()
