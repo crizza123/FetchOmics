@@ -4,7 +4,7 @@ SRRConvert.py
 
 This script processes compressed .sra files for each specified GSE id.
 For each GSE directory under <base_dir>/<GSE_ID>/, it finds all files ending with .sra 
-and converts them into fastq files using the SRA Toolkit's fasterq-dump utility.
+in nested directories and converts them into fastq files using the SRA Toolkit's fasterq-dump utility.
 
 Key Notes:
     - The fasterq-dump utility can convert compressed .sra files directly into fastq format.
@@ -70,14 +70,14 @@ def convert_sra_to_fastq(sra_file: str) -> None:
         logging.error(f"Error processing {srr_id}:\n{e.stderr}")
 
 def process_gse_directory(gse_id: str, base_dir: str) -> None:
-    """Process a single GSE directory by converting all .sra files found within it."""
+    """Process a single GSE directory by converting all .sra files found within nested directories."""
     gse_dir = os.path.join(base_dir, gse_id)
     if not os.path.isdir(gse_dir):
         logging.warning(f"GSE directory not found: {gse_dir}")
         return
 
-    # Find all .sra files in the GSE directory.
-    sra_files = glob.glob(os.path.join(gse_dir, "*.sra"))
+    # Find all .sra files in the nested directory structure.
+    sra_files = glob.glob(os.path.join(gse_dir, "**", "*.sra"), recursive=True)
     if not sra_files:
         logging.warning(f"No .sra files found in directory: {gse_dir}")
         return
