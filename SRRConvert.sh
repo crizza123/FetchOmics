@@ -24,7 +24,6 @@ while IFS= read -r GSE_ID; do
     echo "Processing GSE ID: $GSE_ID"
     python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py \
         --base_dir "$BASE_DIR/FetchOmics" \
-        --output_dir "$BASE_DIR/FetchOmics/$GSE_ID" \
         --gse_list "$GSE_ID" >> "$BASE_DIR/FetchOmics/srr_convert.log" 2>&1
 
     # Check if the command was successful
