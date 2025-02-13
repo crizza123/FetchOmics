@@ -22,9 +22,7 @@ GEO_ACCESSIONS_FILE="$BASE_DIR/FetchOmics/geo_accessions.txt"
 # Run SRRConvert for each GSE ID listed in the GEO_ACCESSIONS_FILE
 while IFS= read -r GSE_ID; do
     echo "Processing GSE ID: $GSE_ID"
-    python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py \
-        --base_dir "$BASE_DIR/FetchOmics" \
-        --gse_list "$GSE_ID" >> "$BASE_DIR/FetchOmics/srr_convert.log" 2>&1
+    python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py --base_dir "$BASE_DIR/FetchOmics" --gse_list "$GSE_ID" >> "$BASE_DIR/FetchOmics/srr_convert.log" 2>&1
 
     # Check if the command was successful
     if [ $? -eq 0 ]; then
