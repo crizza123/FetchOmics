@@ -12,7 +12,7 @@ Key Notes:
     - If the .sra file contains paired-end data, this will produce two files (e.g., sample_1.fastq and sample_2.fastq).
     
 Usage:
-    python SRRConvert.py --base_dir /path/to/FetchOmics --gse_list GSE113046 GSE106973
+    python SRRConvert.py --base_dir /path/to/FetchOmics --gse_list GSE113046 GSE106973 --threads 4
 """
 
 import os
@@ -44,16 +44,22 @@ def parse_arguments() -> argparse.Namespace:
         nargs="+",
         help="List of GSE IDs to process (e.g., GSE113046 GSE106973)."
     )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+        help="Number of threads to use for fasterq-dump (default: 4)."
+    )
     return parser.parse_args()
 
-def convert_sra_to_fastq(sra_file: str) -> None:
+def convert_sra_to_fastq(sra_file: str, threads: int) -> None:
     """Convert a single .sra file into fastq format using fasterq-dump with the --split-files option."""
     # Extract the SRR id from the filename (assumes file is named like SRRxxxxxxx.sra)
     srr_id = os.path.basename(sra_file).rsplit('.', 1)[0]
     logging.info(f"Processing SRR id '{srr_id}' from file: {sra_file}")
 
-    # Build the fasterq-dump command with --split-files.
-    command = ['fasterq-dump', sra_file, '--split-files']
+    # Build the fasterq-dump command with --split-files and threads.
+    command = ['fasterq-dump', sra_file, '--split-files', '--threads', str(threads)]
 
     try:
         result = subprocess.run(
@@ -69,7 +75,7 @@ def convert_sra_to_fastq(sra_file: str) -> None:
     except subprocess.CalledProcessError as e:
         logging.error(f"Error processing {srr_id}:\n{e.stderr}")
 
-def process_gse_directory(gse_id: str, base_dir: str) -> None:
+def process_gse_directory(gse_id: str, base_dir: str, threads: int) -> None:
     """Process a single GSE directory by converting all .sra files found within nested directories."""
     gse_dir = os.path.join(base_dir, gse_id)
     if not os.path.isdir(gse_dir):
@@ -84,7 +90,7 @@ def process_gse_directory(gse_id: str, base_dir: str) -> None:
 
     logging.info(f"Found {len(sra_files)} .sra file(s) in {gse_dir}. Beginning conversion.")
     for sra_file in sra_files:
-        convert_sra_to_fastq(sra_file)
+        convert_sra_to_fastq(sra_file, threads)
 
 def main() -> None:
     """Main function to parse arguments and process each GSE directory."""
@@ -94,7 +100,7 @@ def main() -> None:
     # Process each specified GSE.
     for gse_id in args.gse_list:
         logging.info(f"Starting processing for {gse_id}")
-        process_gse_directory(gse_id, args.base_dir)
+        process_gse_directory(gse_id, args.base_dir, args.threads)
 
 if __name__ == '__main__':
     main()

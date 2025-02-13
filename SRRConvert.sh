@@ -15,8 +15,11 @@
 #SBATCH --error=srr_convert_%j.err          # Standard error file (with job ID)
 #SBATCH --time=01:00:00                    # Time limit (HH:MM:SS)
 #SBATCH --partition=standard                # Partition name (update this to your cluster's partition)
-#SBATCH --nodes=1                          # Number of nodes
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=8                # Number of CPU cores per task
+#SBATCH --mem=64G                        # Memory allocation                          # Number of nodes
 #SBATCH --ntasks=1                         # Number of tasks (processes)
+#SBATCH --account=sihogan0               # Account name (if required)
 
 # Load required modules
 module load Bioinformatics
