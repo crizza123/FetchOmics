@@ -34,17 +34,23 @@ GEO_ACCESSIONS_FILE="$BASE_DIR/geo_accessions.txt"
 echo "Running SRRConvert.py with BASE_DIR: ${BASE_DIR}"
 echo "Processing GSE IDs from file: ${GEO_ACCESSIONS_FILE}"
 
-# Run SRRConvert for each GSE ID listed in the GEO_ACCESSIONS_FILE
+# Prepare a list to hold all GSE IDs
+GSE_LIST=""
+
+# Read GSE IDs from the file and build the GSE_LIST
 while IFS= read -r GSE_ID; do
-    echo "Processing GSE ID: $GSE_ID"
-    python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py --base_dir "$BASE_DIR" --gse_list "$GSE_ID"
-    
-    # Check if the command was successful
-    if [ $? -eq 0 ]; then
-        echo "Successfully processed $GSE_ID."
-    else
-        echo "Failed to process $GSE_ID."
-    fi
+    GSE_LIST="$GSE_LIST $GSE_ID"
 done < "$GEO_ACCESSIONS_FILE"
+
+# Run SRRConvert with the full list of GSE IDs
+echo "Processing GSE IDs: $GSE_LIST"
+python /nfs/turbo/umms-sihogan/crizza/FetchOmics/SRRConvert.py --base_dir "$BASE_DIR" --gse_list $GSE_LIST
+
+# Check if the command was successful
+if [ $? -eq 0 ]; then
+    echo "Successfully processed GSE IDs."
+else
+    echo "Failed to process GSE IDs."
+fi
 
 echo "SRR conversion process completed."
