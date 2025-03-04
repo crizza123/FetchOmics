@@ -4,6 +4,7 @@ import os
 import sys
 import argparse
 import subprocess
+import csv  # used if you have multiple columns or a header in the CSV
 
 def log_message(msg, level="INFO"):
     """Utility function to log a message with a specified level."""
@@ -21,7 +22,7 @@ def download_sra_files(run_ids, base_dir, gse_id):
     os.makedirs(gse_dir, exist_ok=True)
 
     for run_id in run_ids:
-        srr_dir = os.path.join(gse_dir, run_id)  # GSExxx/SRRxxx
+        srr_dir = os.path.join(gse_dir, run_id)  # e.g. GSExxx/SRRxxx
         log_message(f"Creating/using SRR directory: {srr_dir}", "DEBUG")
         os.makedirs(srr_dir, exist_ok=True)
 
@@ -39,14 +40,13 @@ def download_sra_files(run_ids, base_dir, gse_id):
             log_message(f"Error downloading {run_id}: {e}", level="ERROR")
             continue
 
-        # Extra debug check
         if not os.path.isfile(sra_path):
             log_message(f"{sra_path} not found after prefetch.", level="WARNING")
 
 def convert_sra_to_fastq(run_ids, base_dir, gse_id, runinfo_dict=None):
     """
     Converts .sra files to FASTQ, detecting SINGLE vs. PAIRED from runinfo_dict if provided.
-    Directory structure assumed to be base_dir/GSE_ID/SRR_ID/SRR_ID.sra.
+    Directory structure assumed: base_dir/GSE_ID/SRR_ID/SRR_ID.sra.
 
     Debugging statements help track the conversion process and file renaming.
     """
@@ -71,13 +71,14 @@ def convert_sra_to_fastq(run_ids, base_dir, gse_id, runinfo_dict=None):
             log_message(f"fasterq-dump failed for {run_id}: {e}", level="ERROR")
             continue
         
-        # Determine layout
+        # Determine layout from runinfo_dict or default to SINGLE
         layout = runinfo_dict.get(run_id, "SINGLE").upper() if runinfo_dict else "SINGLE"
         log_message(f"Detected layout for {run_id}: {layout}", "DEBUG")
 
         if layout == "PAIRED":
             log_message(f"{run_id}: Paired-end data – FASTQ files split into _1 and _2.")
         else:
+            # Single-end: rename *_1.fastq -> .fastq
             single_fastq = os.path.join(srr_dir, f"{run_id}_1.fastq")
             target_fastq = os.path.join(srr_dir, f"{run_id}.fastq")
             if os.path.exists(single_fastq):
@@ -94,16 +95,15 @@ def convert_sra_to_fastq(run_ids, base_dir, gse_id, runinfo_dict=None):
 
 def main():
     parser = argparse.ArgumentParser(description="SRRConvert: Downloads SRA files and converts to FASTQ.")
-    parser.add_argument("--base_dir", required=True, help="Base output directory")
+    parser.add_argument("--base_dir", required=True, help="Base output directory (where GSE folders exist)")
     parser.add_argument("--gse_list", nargs="+", help="List of GSE IDs to process (optional)")
-    parser.add_argument("--paired", action='store_true', help="If provided, assume runs are paired-end unless stated otherwise")
+    parser.add_argument("--paired", action='store_true', help="If provided, treat runs as paired-end by default")
     args = parser.parse_args()
 
     # Debug logging for arguments
     log_message(f"Arguments received: base_dir={args.base_dir}, gse_list={args.gse_list}, paired={args.paired}", "DEBUG")
 
-    # If a GSE list was not provided, we might read from a geo_accessions.txt or something else
-    # This snippet is an example. Adjust as needed in your environment.
+    # If a GSE list was not provided, read from a default file (optional)
     if not args.gse_list:
         default_gse_file = os.path.join(args.base_dir, "geo_accessions.txt")
         log_message(f"No GSE list provided; reading from {default_gse_file}", "DEBUG")
@@ -113,37 +113,53 @@ def main():
         with open(default_gse_file, "r") as f:
             args.gse_list = [line.strip() for line in f if line.strip()]
 
-    # Example: for each GSE, read the SRR IDs from a text file
     for gse_id in args.gse_list:
         if not gse_id:
             continue
         log_message(f"Processing GSE: {gse_id}", "INFO")
 
-        # The user might have a file like run_ids_<GSE_ID>.txt
-        run_id_file = os.path.join(args.base_dir, f"run_ids_{gse_id}.txt")
-        if not os.path.isfile(run_id_file):
-            log_message(f"Missing run ID file for {gse_id}: {run_id_file}", level="ERROR")
+        # -- ADJUSTMENT: Instead of run_ids_<GSE_ID>.txt, we read from <GSE_ID>_SRR.csv
+        # Example: GSE113046_SRR.csv
+        # Adjust if your CSV has more columns or a different format.
+        csv_file = os.path.join(args.base_dir, f"{gse_id}_SRR.csv")
+        if not os.path.isfile(csv_file):
+            log_message(f"Missing run ID CSV for {gse_id}: {csv_file}", level="ERROR")
             continue
 
-        with open(run_id_file, "r") as rf:
-            run_ids = [line.strip() for line in rf if line.strip()]
+        # We'll parse the CSV, assuming a header on the first line and run IDs in subsequent lines
+        run_ids = []
+        try:
+            with open(csv_file, "r", encoding="utf-8") as f:
+                # If your CSV has columns with a header named "Run", use DictReader:
+                # reader = csv.DictReader(f)
+                # for row in reader:
+                #     if "Run" in row:
+                #         run_ids.append(row["Run"])
+                
+                # If it's a single-column CSV with a header line, skip the header
+                # and read each subsequent line as an SRR ID:
+                next(f)  # Skip header row
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        run_ids.append(line)
+        except Exception as e:
+            log_message(f"Error reading CSV {csv_file}: {e}", level="ERROR")
+            continue
 
-        # For demonstration, create a runinfo_dict to track single/paired
-        # If `--paired` is set, we treat all runs as PAIRED.
-        # Otherwise, default to SINGLE. Alternatively, you can load an SRA_RunInfo CSV here if needed.
+        log_message(f"Found {len(run_ids)} run IDs for {gse_id}: {run_ids}", "DEBUG")
+
+        # Create a runinfo_dict to track single/paired, defaulting to SINGLE if not forced:
         runinfo_dict = {}
-        if args.paired:
-            for rid in run_ids:
-                runinfo_dict[rid] = "PAIRED"
-        else:
-            for rid in run_ids:
-                runinfo_dict[rid] = "SINGLE"
+        default_layout = "PAIRED" if args.paired else "SINGLE"
+        for rid in run_ids:
+            runinfo_dict[rid] = default_layout
 
-        # Download the SRA files
+        # Download SRA
         log_message(f"Downloading SRA files for GSE: {gse_id}", "INFO")
         download_sra_files(run_ids, args.base_dir, gse_id)
 
-        # Convert them to FASTQ
+        # Convert to FASTQ
         log_message(f"Converting SRA to FASTQ for GSE: {gse_id}", "INFO")
         convert_sra_to_fastq(run_ids, args.base_dir, gse_id, runinfo_dict)
 
