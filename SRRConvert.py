@@ -1,106 +1,143 @@
-#!/usr/bin/env python3
-"""
-SRRConvert.py
-
-This script processes compressed .sra files for each specified GSE id.
-For each GSE directory under <base_dir>/<GSE_ID>/, it finds all files ending with .sra 
-in nested directories and converts them into fastq files using the SRA Toolkit's fasterq-dump utility.
-
-Key Notes:
-    - The fasterq-dump utility can convert compressed .sra files directly into fastq format.
-      For paired-end reads, the '--split-files' option is used to generate separate FASTQ files.
-    - If the .sra file contains paired-end data, this will produce two files (e.g., sample_1.fastq and sample_2.fastq).
-    
-Usage:
-    python SRRConvert.py --base_dir /path/to/FetchOmics --gse_list GSE113046 GSE106973 --threads 4
-"""
+#!/usr/bin/env python
+# coding: utf-8
 
 import os
+import sys
 import glob
-import logging
 import argparse
 import subprocess
+import pandas as pd
+from utils import log_message, create_directory
 
-def setup_logging() -> None:
-    """Configure logging format and level."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
+class SRRConvert:
+    def __init__(self, base_dir: str):
+        """
+        Initialize SRRConvert with base directory.
+        
+        Args:
+            base_dir (str): Base directory where GSE subdirectories are located.
+        """
+        self.base_dir = base_dir
 
-def parse_arguments() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Convert compressed .sra files to fastq format using fasterq-dump with split-files option."
-    )
-    parser.add_argument(
-        "--base_dir",
-        required=True,
-        help="Base directory containing GSE subdirectories (e.g., /nfs/turbo/umms-sihogan/crizza/FetchOmics)."
-    )
-    parser.add_argument(
-        "--gse_list",
-        required=True,
-        nargs="+",
-        help="List of GSE IDs to process (e.g., GSE113046 GSE106973)."
-    )
-    parser.add_argument(
-        "--threads",
-        type=int,
-        default=4,
-        help="Number of threads to use for fasterq-dump (default: 4)."
-    )
+    def convert_srr_to_fastq(self, srr_ids: list, accession: str) -> None:
+        """
+        Convert SRA files to FASTQ format for a list of SRR IDs.
+        
+        Args:
+            srr_ids (list): List of SRR IDs to convert.
+            accession (str): GEO accession ID.
+        """
+        geo_dir = os.path.join(self.base_dir, accession)
+        
+        # Get library layout information if available
+        runinfo_file = os.path.join(geo_dir, f"{accession}_SRA_RunInfo.csv")
+        layout_map = {}
+        
+        if os.path.exists(runinfo_file):
+            try:
+                runinfo_df = pd.read_csv(runinfo_file)
+                if "Run" in runinfo_df.columns and "LibraryLayout" in runinfo_df.columns:
+                    layout_map = {row["Run"]: row["LibraryLayout"] for _, row in runinfo_df.iterrows()}
+            except Exception as e:
+                log_message(f"Error reading RunInfo file: {e}", level="WARNING")
+        
+        for srr_id in srr_ids:
+            # The SRR directory should be in the GEO directory
+            srr_dir = os.path.join(geo_dir, srr_id)
+            
+            # Use glob to find the SRA file regardless of its nested location
+            sra_file_pattern = os.path.join(srr_dir, "**", f"{srr_id}.sra")
+            sra_files = glob.glob(sra_file_pattern, recursive=True)
+            
+            if not sra_files:
+                log_message(f"SRA file not found for {srr_id}. Checking for alternative locations...", level="WARNING")
+                
+                # Check additional common locations
+                alt_patterns = [
+                    os.path.join(srr_dir, "SRA", f"{srr_id}.sra"),
+                    os.path.join(srr_dir, f"{srr_id}.sra"),
+                    os.path.join(geo_dir, f"{srr_id}", f"{srr_id}.sra")
+                ]
+                
+                for pattern in alt_patterns:
+                    if os.path.exists(pattern):
+                        sra_files = [pattern]
+                        log_message(f"Found SRA file at: {pattern}")
+                        break
+                
+                if not sra_files:
+                    log_message(f"SRA file not found for {srr_id}. Skipping conversion.", level="ERROR")
+                    continue
+            
+            sra_file = sra_files[0]  # Use the first found SRA file
+            
+            # Determine library layout
+            layout = layout_map.get(srr_id, "SINGLE").upper()
+            
+            # Output to the same directory as the SRA file
+            output_dir = os.path.dirname(sra_file)
+            
+            log_message(f"Converting {srr_id} to FASTQ in {output_dir}...")
+            
+            try:
+                # Use fasterq-dump with --split-files option
+                fasterq_command = [
+                    "fasterq-dump",
+                    "--split-files",
+                    sra_file,
+                    "-O", output_dir
+                ]
+                
+                subprocess.run(fasterq_command, check=True, text=True)
+                
+                # Handle file naming based on layout
+                if layout == "SINGLE":
+                    # For single-end reads, rename _1.fastq to .fastq if needed
+                    single_fastq = os.path.join(output_dir, f"{srr_id}_1.fastq")
+                    if os.path.exists(single_fastq):
+                        target_fastq = os.path.join(output_dir, f"{srr_id}.fastq")
+                        os.rename(single_fastq, target_fastq)
+                        log_message(f"Renamed {single_fastq} to {target_fastq}")
+                
+                log_message(f"Successfully converted {srr_id} to FASTQ format in {output_dir}")
+                
+            except subprocess.CalledProcessError as e:
+                log_message(f"Error converting {srr_id} to FASTQ: {e}", level="ERROR")
+
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Convert SRA files to FASTQ format.")
+    parser.add_argument("--base_dir", required=True, help="Base directory where GSE subdirectories are located.")
+    parser.add_argument("--gse_list", nargs="+", required=True, help="List of GSE IDs to process.")
     return parser.parse_args()
 
-def convert_sra_to_fastq(sra_file: str, threads: int) -> None:
-    """Convert a single .sra file into fastq format using fasterq-dump with the --split-files option."""
-    # Extract the SRR id from the filename (assumes file is named like SRRxxxxxxx.sra)
-    srr_id = os.path.basename(sra_file).rsplit('.', 1)[0]
-    logging.info(f"Processing SRR id '{srr_id}' from file: {sra_file}")
-
-    # Build the fasterq-dump command with --split-files and threads.
-    command = ['fasterq-dump', sra_file, '--split-files', '--threads', str(threads)]
-
-    try:
-        result = subprocess.run(
-            command,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        logging.info(f"Conversion output for {srr_id}:\n{result.stdout}")
-        if result.stderr:
-            logging.warning(f"Conversion warnings for {srr_id}:\n{result.stderr}")
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Error processing {srr_id}:\n{e.stderr}")
-
-def process_gse_directory(gse_id: str, base_dir: str, threads: int) -> None:
-    """Process a single GSE directory by converting all .sra files found within nested directories."""
-    gse_dir = os.path.join(base_dir, gse_id)
-    if not os.path.isdir(gse_dir):
-        logging.warning(f"GSE directory not found: {gse_dir}")
-        return
-
-    # Find all .sra files in the nested directory structure.
-    sra_files = glob.glob(os.path.join(gse_dir, "**", "*.sra"), recursive=True)
-    if not sra_files:
-        logging.warning(f"No .sra files found in directory: {gse_dir}")
-        return
-
-    logging.info(f"Found {len(sra_files)} .sra file(s) in {gse_dir}. Beginning conversion.")
-    for sra_file in sra_files:
-        convert_sra_to_fastq(sra_file, threads)
-
-def main() -> None:
-    """Main function to parse arguments and process each GSE directory."""
-    setup_logging()
+def main():
+    """Main function to run SRRConvert."""
     args = parse_arguments()
-
-    # Process each specified GSE.
+    
+    converter = SRRConvert(args.base_dir)
+    
     for gse_id in args.gse_list:
-        logging.info(f"Starting processing for {gse_id}")
-        process_gse_directory(gse_id, args.base_dir, args.threads)
+        log_message(f"Processing GSE ID: {gse_id}")
+        
+        # Get SRR IDs for this GSE
+        srr_csv_path = os.path.join(args.base_dir, gse_id, f"{gse_id}_SRR.csv")
+        
+        if not os.path.exists(srr_csv_path):
+            log_message(f"SRR CSV file not found for {gse_id}. Skipping.", level="WARNING")
+            continue
+        
+        try:
+            srr_df = pd.read_csv(srr_csv_path)
+            if "Run" not in srr_df.columns:
+                log_message(f"'Run' column not found in {srr_csv_path}. Skipping {gse_id}.", level="ERROR")
+                continue
+                
+            srr_ids = srr_df["Run"].tolist()
+            converter.convert_srr_to_fastq(srr_ids, gse_id)
+            
+        except Exception as e:
+            log_message(f"Error processing {gse_id}: {e}", level="ERROR")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
