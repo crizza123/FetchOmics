@@ -1,143 +1,109 @@
-#!/usr/bin/env python
-# coding: utf-8
+#!/usr/bin/env python3
 
 import os
 import sys
-import glob
 import argparse
 import subprocess
-import pandas as pd
-from utils import log_message, create_directory
+import csv
 
-class SRRConvert:
-    def __init__(self, base_dir: str):
-        """
-        Initialize SRRConvert with base directory.
-        
-        Args:
-            base_dir (str): Base directory where GSE subdirectories are located.
-        """
-        self.base_dir = base_dir
+def log_message(msg, level="INFO"):
+    print(f"[{level}] {msg}")
 
-    def convert_srr_to_fastq(self, srr_ids: list, accession: str) -> None:
-        """
-        Convert SRA files to FASTQ format for a list of SRR IDs.
-        
-        Args:
-            srr_ids (list): List of SRR IDs to convert.
-            accession (str): GEO accession ID.
-        """
-        geo_dir = os.path.join(self.base_dir, accession)
-        
-        # Get library layout information if available
-        runinfo_file = os.path.join(geo_dir, f"{accession}_SRA_RunInfo.csv")
-        layout_map = {}
-        
-        if os.path.exists(runinfo_file):
-            try:
-                runinfo_df = pd.read_csv(runinfo_file)
-                if "Run" in runinfo_df.columns and "LibraryLayout" in runinfo_df.columns:
-                    layout_map = {row["Run"]: row["LibraryLayout"] for _, row in runinfo_df.iterrows()}
-            except Exception as e:
-                log_message(f"Error reading RunInfo file: {e}", level="WARNING")
-        
-        for srr_id in srr_ids:
-            # The SRR directory should be in the GEO directory
-            srr_dir = os.path.join(geo_dir, srr_id)
-            
-            # Use glob to find the SRA file regardless of its nested location
-            sra_file_pattern = os.path.join(srr_dir, "**", f"{srr_id}.sra")
-            sra_files = glob.glob(sra_file_pattern, recursive=True)
-            
-            if not sra_files:
-                log_message(f"SRA file not found for {srr_id}. Checking for alternative locations...", level="WARNING")
-                
-                # Check additional common locations
-                alt_patterns = [
-                    os.path.join(srr_dir, "SRA", f"{srr_id}.sra"),
-                    os.path.join(srr_dir, f"{srr_id}.sra"),
-                    os.path.join(geo_dir, f"{srr_id}", f"{srr_id}.sra")
-                ]
-                
-                for pattern in alt_patterns:
-                    if os.path.exists(pattern):
-                        sra_files = [pattern]
-                        log_message(f"Found SRA file at: {pattern}")
-                        break
-                
-                if not sra_files:
-                    log_message(f"SRA file not found for {srr_id}. Skipping conversion.", level="ERROR")
-                    continue
-            
-            sra_file = sra_files[0]  # Use the first found SRA file
-            
-            # Determine library layout
-            layout = layout_map.get(srr_id, "SINGLE").upper()
-            
-            # Output to the same directory as the SRA file
-            output_dir = os.path.dirname(sra_file)
-            
-            log_message(f"Converting {srr_id} to FASTQ in {output_dir}...")
-            
-            try:
-                # Use fasterq-dump with --split-files option
-                fasterq_command = [
-                    "fasterq-dump",
-                    "--split-files",
-                    sra_file,
-                    "-O", output_dir
-                ]
-                
-                subprocess.run(fasterq_command, check=True, text=True)
-                
-                # Handle file naming based on layout
-                if layout == "SINGLE":
-                    # For single-end reads, rename _1.fastq to .fastq if needed
-                    single_fastq = os.path.join(output_dir, f"{srr_id}_1.fastq")
-                    if os.path.exists(single_fastq):
-                        target_fastq = os.path.join(output_dir, f"{srr_id}.fastq")
-                        os.rename(single_fastq, target_fastq)
-                        log_message(f"Renamed {single_fastq} to {target_fastq}")
-                
-                log_message(f"Successfully converted {srr_id} to FASTQ format in {output_dir}")
-                
-            except subprocess.CalledProcessError as e:
-                log_message(f"Error converting {srr_id} to FASTQ: {e}", level="ERROR")
+def read_runinfo_csv(csv_path):
+    """
+    Reads a CSV (e.g. SRA RunInfo) and returns a dict: { run_id -> layout }, 
+    where layout is 'SINGLE' or 'PAIRED'.
+    """
+    runinfo_dict = {}
+    try:
+        with open(csv_path, mode="r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                run_id = row.get("Run", "").strip()
+                layout = row.get("LibraryLayout", "SINGLE").strip().upper()
+                if run_id:
+                    runinfo_dict[run_id] = layout
+    except FileNotFoundError:
+        log_message(f"Could not find CSV: {csv_path}", level="ERROR")
+    except Exception as e:
+        log_message(f"Error reading CSV: {e}", level="ERROR")
+    return runinfo_dict
 
-def parse_arguments():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Convert SRA files to FASTQ format.")
-    parser.add_argument("--base_dir", required=True, help="Base directory where GSE subdirectories are located.")
-    parser.add_argument("--gse_list", nargs="+", required=True, help="List of GSE IDs to process.")
-    return parser.parse_args()
-
-def main():
-    """Main function to run SRRConvert."""
-    args = parse_arguments()
+def convert_sra_to_fastq(run_ids, base_dir, gse_id, runinfo_dict=None):
+    """
+    Converts .sra to FASTQ for each SRR ID in the older nested structure:
+        base_dir/GSE_ID/SRR_ID/SRR_ID/SRR_ID.sra
+    Checks runinfo_dict for 'SINGLE'/'PAIRED'; defaults to 'SINGLE' if missing.
+    """
+    gse_dir = os.path.join(base_dir, gse_id)
     
-    converter = SRRConvert(args.base_dir)
-    
-    for gse_id in args.gse_list:
-        log_message(f"Processing GSE ID: {gse_id}")
-        
-        # Get SRR IDs for this GSE
-        srr_csv_path = os.path.join(args.base_dir, gse_id, f"{gse_id}_SRR.csv")
-        
-        if not os.path.exists(srr_csv_path):
-            log_message(f"SRR CSV file not found for {gse_id}. Skipping.", level="WARNING")
+    for run_id in run_ids:
+        # Nested path: <base_dir>/<GSE_ID>/<SRR_ID>/<SRR_ID>/<SRR_ID>.sra
+        srr_parent_dir = os.path.join(gse_dir, run_id)
+        srr_dir = os.path.join(srr_parent_dir, run_id)
+        sra_path = os.path.join(srr_dir, f"{run_id}.sra")
+
+        if not os.path.exists(sra_path):
+            log_message(f"{sra_path} does not exist. Skipping.", level="WARNING")
+            continue
+
+        # Convert to FASTQ
+        log_message(f"Converting {run_id}.sra to FASTQ...")
+        conv_cmd = ["fasterq-dump", "--split-files", "--threads", "4", sra_path, "-O", srr_dir]
+        try:
+            subprocess.run(conv_cmd, check=True, text=True)
+        except subprocess.CalledProcessError as e:
+            log_message(f"fasterq-dump failed for {run_id}: {e}", level="ERROR")
             continue
         
-        try:
-            srr_df = pd.read_csv(srr_csv_path)
-            if "Run" not in srr_df.columns:
-                log_message(f"'Run' column not found in {srr_csv_path}. Skipping {gse_id}.", level="ERROR")
-                continue
-                
-            srr_ids = srr_df["Run"].tolist()
-            converter.convert_srr_to_fastq(srr_ids, gse_id)
-            
-        except Exception as e:
-            log_message(f"Error processing {gse_id}: {e}", level="ERROR")
+        # Determine layout
+        if runinfo_dict is not None:
+            layout = runinfo_dict.get(run_id, "SINGLE")
+        else:
+            layout = "SINGLE"
+        layout = layout.upper()
+
+        # If single-end, rename *_1.fastq to .fastq
+        if layout == "PAIRED":
+            log_message(f"{run_id}: Paired-end data – FASTQ files split into _1 and _2.")
+        else:
+            # SINGLE
+            single_fastq = os.path.join(srr_dir, f"{run_id}_1.fastq")
+            target_fastq = os.path.join(srr_dir, f"{run_id}.fastq")
+            if os.path.exists(single_fastq):
+                os.rename(single_fastq, target_fastq)
+                log_message(f"{run_id}: Single-end data – renamed '{run_id}_1.fastq' to '{run_id}.fastq'.")
+
+        # Optionally remove the .sra file to save space
+        # os.remove(sra_path)
+        # log_message(f"Removed {sra_path}")
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert SRA to FASTQ in nested directories, with dynamic single/paired logic.")
+    parser.add_argument("--base_dir", required=True, help="Base directory containing GSE folders.")
+    parser.add_argument("--gse_id", required=True, help="GSE ID (e.g., GSE12345).")
+    parser.add_argument("--run_ids", nargs="+", required=True, help="List of SRR run IDs.")
+    parser.add_argument("--paired", action="store_true", help="If set, force all runs as paired-end (unless CSV says otherwise).")
+    parser.add_argument("--runinfo_csv", help="Optional path to CSV with columns 'Run' and 'LibraryLayout'. If provided, uses its data.")
+    args = parser.parse_args()
+
+    # Read optional CSV
+    runinfo_dict = {}
+    if args.runinfo_csv:
+        runinfo_dict = read_runinfo_csv(args.runinfo_csv)
+
+    # If user gave --paired, override missing entries to PAIRED
+    if args.paired:
+        for rid in args.run_ids:
+            if rid not in runinfo_dict:
+                runinfo_dict[rid] = "PAIRED"
+    
+    # For any run ID not listed in the CSV, default to SINGLE
+    for rid in args.run_ids:
+        if rid not in runinfo_dict:
+            runinfo_dict[rid] = "SINGLE"
+
+    convert_sra_to_fastq(args.run_ids, args.base_dir, args.gse_id, runinfo_dict=runinfo_dict)
 
 if __name__ == "__main__":
     main()
