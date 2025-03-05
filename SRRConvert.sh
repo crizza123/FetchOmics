@@ -48,7 +48,7 @@ GEO_ACCESSIONS_FILE="$BASE_DIR/geo_accessions.txt"
 
 # Path to the Python script that converts .sra -> FASTQ.
 # This .py script is assumed to handle reading <GSE_ID>_SRR.csv internally.
-CONVERSION_SCRIPT="$BASE_DIR/convert_sra_to_fastq_standalone.py"
+CONVERSION_SCRIPT="$BASE_DIR/SRRConvert.py"
 
 echo "[INFO] Starting SRA-to-FASTQ conversion with $CONVERSION_SCRIPT"
 echo "[INFO] Base Directory:       $BASE_DIR"
