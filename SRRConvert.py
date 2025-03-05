@@ -94,7 +94,7 @@ def convert_sra_to_fastq(run_ids, base_dir, gse_id, paired=False):
         if paired:
             log_message(f"{run_id}: Paired-end data – FASTQ files split into _1 and _2.")
         else:
-            # Single-end: rename *_1.fastq to <SRR_ID>.fastq
+            # Single-end: rename *_1.fastq -> <SRR_ID>.fastq
             single_fastq = os.path.join(srr_dir, f"{run_id}_1.fastq")
             target_fastq = os.path.join(srr_dir, f"{run_id}.fastq")
             if os.path.exists(single_fastq):
@@ -147,15 +147,18 @@ def read_run_ids_from_csv(base_dir, gse_id):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SRRConvert: Downloads .sra files and converts them to FASTQ, "
+        description="SRRConvert: Optionally downloads .sra and converts to FASTQ, "
                     "with a nested directory structure <base_dir>/<GSE_ID>/<SRR_ID>/<SRR_ID>/<SRR_ID>.sra"
     )
     parser.add_argument("--base_dir", required=True, help="Base directory (where GSE folders exist)")
     parser.add_argument("--gse_list", nargs="+", help="List of GSE IDs (e.g., GSE113046)")
     parser.add_argument("--paired", action="store_true", help="If set, treat all runs as paired-end.")
+    parser.add_argument("--skip_download", action="store_true", 
+                        help="Skip SRA prefetch; only convert existing .sra to FASTQ.")
     args = parser.parse_args()
 
-    log_message(f"Arguments: base_dir={args.base_dir}, gse_list={args.gse_list}, paired={args.paired}", "DEBUG")
+    log_message(f"Arguments: base_dir={args.base_dir}, gse_list={args.gse_list}, "
+                f"paired={args.paired}, skip_download={args.skip_download}", "DEBUG")
 
     if not args.gse_list:
         log_message("No GSE ID(s) provided to --gse_list. Exiting.", level="ERROR")
@@ -172,9 +175,12 @@ def main():
             log_message(f"Failed to read run IDs for {gse_id}. Skipping this GSE.", "ERROR")
             continue
 
-        # 2) Download .sra
-        log_message(f"Downloading SRA files for GSE: {gse_id}", "INFO")
-        download_sra_files(run_ids, args.base_dir, gse_id)
+        # 2) Optional: Download .sra
+        if not args.skip_download:
+            log_message(f"Downloading SRA files for GSE: {gse_id}", "INFO")
+            download_sra_files(run_ids, args.base_dir, gse_id)
+        else:
+            log_message(f"Skipping download for GSE: {gse_id} -- using existing .sra files.", "INFO")
 
         # 3) Convert to FASTQ
         log_message(f"Converting SRA to FASTQ for GSE: {gse_id}", "INFO")
