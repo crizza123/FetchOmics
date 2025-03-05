@@ -80,7 +80,8 @@ while IFS= read -r GSE_ID; do
     echo "[DEBUG] Invoking Python script with --gse_list $GSE_ID"
     python "$CONVERSION_SCRIPT" \
         --base_dir "$BASE_DIR" \
-        --gse_list "$GSE_ID"
+        --gse_list "$GSE_ID" \
+        --skip_download
         # --paired  # Uncomment if you want to force all runs in each GSE to be paired
 
     STATUS=$?
