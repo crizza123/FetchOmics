@@ -36,7 +36,6 @@ def download_sra_files(run_ids, base_dir, gse_id):
             log_message(f"Successfully downloaded {run_id} to {srr_dir}")
         except subprocess.CalledProcessError as e:
             log_message(f"Error downloading {run_id}: {e}", level="ERROR")
-            # Skip to next run_id if this fails
             continue
 
         if not os.path.isfile(sra_path):
@@ -60,12 +59,12 @@ def convert_sra_to_fastq(run_ids, base_dir, gse_id, paired=False):
 
         log_message(f"[convert_sra_to_fastq] Converting {run_id}.sra to FASTQ...", "DEBUG")
         conv_cmd = [
-            "fasterq-dump", 
-            "--split-files", 
-            "--threads", 
-            "4", 
-            sra_path, 
-            "-O", 
+            "fasterq-dump",
+            "--split-files",
+            "--threads",
+            "4",
+            sra_path,
+            "-O",
             srr_dir
         ]
         log_message(f"[convert_sra_to_fastq] Running cmd: {' '.join(conv_cmd)}", "DEBUG")
@@ -96,11 +95,13 @@ def convert_sra_to_fastq(run_ids, base_dir, gse_id, paired=False):
 
 def read_run_ids_from_csv(base_dir, gse_id):
     """
-    Attempts to read run IDs from <base_dir>/<gse_id>_SRR.csv
+    Attempts to read run IDs from:
+        <base_dir>/<gse_id>/<gse_id>_SRR.csv
+
     Expects a header row, then one SRR ID per subsequent line.
     Returns a list of SRR IDs.
     """
-    csv_path = os.path.join(base_dir, f"{gse_id}_SRR.csv")
+    csv_path = os.path.join(base_dir, gse_id, f"{gse_id}_SRR.csv")
     log_message(f"[read_run_ids_from_csv] Looking for {csv_path}", "DEBUG")
 
     if not os.path.isfile(csv_path):
@@ -147,11 +148,10 @@ def main():
             continue
         log_message(f"Processing GSE: {gse_id}", "INFO")
 
-        # 1. Read run IDs from <gse_id>_SRR.csv
+        # 1. Read run IDs from <base_dir>/<gse_id>/<gse_id>_SRR.csv
         run_ids = read_run_ids_from_csv(args.base_dir, gse_id)
         if not run_ids:
             log_message(f"Failed to read any run IDs for {gse_id}. Aborting this GSE.", "ERROR")
-            # We'll continue to next GSE rather than sys.exit here
             continue
 
         # 2. Download SRA
@@ -165,7 +165,6 @@ def main():
         log_message(f"Finished processing GSE: {gse_id}\n", "INFO")
 
 if __name__ == "__main__":
-    # If anything unexpected happens, let’s catch it with a broad except to see an error
     try:
         main()
     except Exception as ex:
