@@ -33,7 +33,7 @@ BASE_DIR="/nfs/turbo/umms-sihogan/crizza/Data"
 GSE_LIST="GSE106973 GSE128003 GSE128074"
 
 # Number of threads (cpus) to use for STAR
-THREADS=8
+THREADS=$SLURM_CPUS_PER_TASK
 
 echo "=========================================================="
 echo "[INFO] STAR Alignment job starting..."
