@@ -7,18 +7,13 @@ import subprocess
 import argparse
 
 ###############################################################################
-# STARAlign.py
-# ------------
-# Recursively searches for single-end FASTQ files in each dataset subdirectory
-# (GSEXXXX/SRRXXXX/...) and aligns them to GRCm39 using STAR.
-#
-# Example usage (automatically invoked by STARAlign.sh):
-#   python STARAlign.py --base_dir /nfs/turbo/umms-sihogan/crizza/Data \
-#                       --gse_list GSE106973 GSE128003 GSE128074 \
-#                       --threads 8
+# STARAlign.py (Updated)
+# ----------------------
+# Searches for single-end FASTQ files inside the correct base directory and 
+# aligns them with STAR.
 ###############################################################################
 
-# Paths to the GRCm39 reference genome index and GTF annotation
+# Define STAR genome index and GTF annotation explicitly
 GENOME_INDEX = "/nfs/turbo/umms-sihogan/crizza/STAR_INDEX/GRCm39"
 ANNOTATION_GTF = "/nfs/turbo/umms-sihogan/crizza/STAR_INDEX/GRCm39/GRCm39.gtf"
 
@@ -36,7 +31,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    base_dir = os.path.abspath(args.base_dir)
+    base_dir = os.path.abspath(args.base_dir)  # Ensure absolute path
     gse_list = args.gse_list
     threads = args.threads
 
@@ -52,12 +47,13 @@ def main():
     for gse_id in gse_list:
         gse_path = os.path.join(base_dir, gse_id)
         if not os.path.isdir(gse_path):
-            print(f"[ERROR] Cannot find directory for {gse_id}: {gse_path}", file=sys.stderr)
+            print(f"[ERROR] Cannot find dataset directory for {gse_id}: {gse_path}", file=sys.stderr)
             overall_fail += 1
             continue
 
         print(f"\n[INFO] Processing dataset: {gse_id}")
-        # Look for SRR subdirectories in GSE directory
+
+        # Locate SRR subdirectories
         srr_folders = [
             d for d in os.listdir(gse_path)
             if d.startswith("SRR") and os.path.isdir(os.path.join(gse_path, d))
@@ -71,7 +67,7 @@ def main():
             srr_dir = os.path.join(gse_path, srr_id)
             print(f"[INFO] Searching for FASTQ files under: {srr_dir}")
 
-            # Recursively gather .fastq or .fastq.gz files
+            # Recursively search for FASTQ files
             fastq_paths = glob.glob(os.path.join(srr_dir, "**", "*.fastq"), recursive=True)
             fastq_paths += glob.glob(os.path.join(srr_dir, "**", "*.fastq.gz"), recursive=True)
             fastq_paths.sort()
@@ -80,40 +76,36 @@ def main():
                 print(f"[WARNING] No FASTQ files found for {srr_id}.")
                 continue
 
-            # For single-end SMART-seq2, we typically have one .fastq per sample,
-            # but if multiple exist, we pass them all to STAR as single-end reads.
             print(f"[INFO] Found {len(fastq_paths)} FASTQ file(s). Assuming SINGLE-END layout.")
 
             # Construct the STAR command
-            out_prefix = os.path.join(srr_dir, f"{srr_id}_")  # output in SRR folder
-            cmd_parts = [
+            out_prefix = os.path.join(srr_dir, f"{srr_id}_")
+            star_cmd = [
                 "STAR",
                 f"--runThreadN {threads}",
                 f"--genomeDir {GENOME_INDEX}",
                 f"--readFilesIn {' '.join(fastq_paths)}",
                 f"--outFileNamePrefix {out_prefix}",
-                "--outSAMtype BAM Unsorted",       # produce an unsorted BAM
-                "--outFilterMultimapNmax 1"        # only unique alignments
+                "--outSAMtype BAM Unsorted",
+                "--outFilterMultimapNmax 1"
             ]
 
-            # If any FASTQ is gzipped, add zcat
+            # Handle gzipped FASTQ
             if any(fp.endswith(".gz") for fp in fastq_paths):
-                cmd_parts.append("--readFilesCommand zcat")
+                star_cmd.append("--readFilesCommand zcat")
 
-            star_cmd = " ".join(cmd_parts)
-            print(f"[DEBUG] STAR command:\n  {star_cmd}")
+            star_cmd_str = " ".join(star_cmd)
+            print(f"[DEBUG] STAR command:\n  {star_cmd_str}")
 
             try:
-                subprocess.run(star_cmd, shell=True, check=True)
-                bam_file = os.path.join(srr_dir, f"{srr_id}_Aligned.out.bam")
-                print(f"[INFO] Alignment complete for {srr_id}. Output: {bam_file}")
+                subprocess.run(star_cmd_str, shell=True, check=True)
+                print(f"[INFO] Alignment complete for {srr_id}. Output at {out_prefix}Aligned.out.bam")
             except subprocess.CalledProcessError as e:
                 overall_fail += 1
-                print(f"[ERROR] STAR alignment failed for {srr_id} with exit code {e.returncode}.", file=sys.stderr)
-                continue
+                print(f"[ERROR] STAR alignment failed for {srr_id}. Exit code {e.returncode}.", file=sys.stderr)
 
     if overall_fail > 0:
-        print("[ERROR] Some alignments failed. Check the logs for details.")
+        print("[ERROR] Some alignments failed. Check logs.")
         sys.exit(1)
     else:
         print("[INFO] All alignments completed successfully.")
