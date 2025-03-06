@@ -11,25 +11,22 @@
 #SBATCH --account=sihogan0
 
 ###############################################################################
-# STARAlign.sh
-# ------------
-# Submits a job to align single-end FASTQ files to GRCm39 in a nested directory
-# structure: /nfs/turbo/umms-sihogan/crizza/Data/GSEXXX/SRRXXX/SRXXX/*.fastq
-#
-# Usage: sbatch STARAlign.sh
-#
-# Note: Adjust time, memory, partition, etc., as needed for your HPC usage.
+# STARAlign.sh (Updated)
+# ----------------------
+# Runs STARAlign.py for single-end FASTQ files located in Data directory.
+# Ensures paths are explicitly set between script directory and data location.
 ###############################################################################
 
 # Load modules
 module load Bioinformatics
 module load STAR
-module load python/3.12.1    # or whichever Python module has necessary packages
+module load python/3.12.1    # Ensure Python module has necessary packages
 
-# Define the base directory where your GSE datasets reside
-BASE_DIR="/nfs/turbo/umms-sihogan/crizza/Data"
+# Define directories explicitly
+SCRIPT_DIR="/nfs/turbo/umms-sihogan/crizza/FetchOmics"  # Location of STARAlign.py
+BASE_DIR="/nfs/turbo/umms-sihogan/crizza/Data"          # Location of your datasets (FASTQ files)
 
-# List the GSE datasets you want to process (space-separated)
+# List of datasets to process (update this if you add more datasets)
 GSE_LIST="GSE106973 GSE128003 GSE128074"
 
 # Number of threads (cpus) to use for STAR
@@ -37,12 +34,16 @@ THREADS=$SLURM_CPUS_PER_TASK
 
 echo "=========================================================="
 echo "[INFO] STAR Alignment job starting..."
-echo "  Base directory : $BASE_DIR"
-echo "  Datasets       : $GSE_LIST"
-echo "  Threads        : $THREADS"
+echo "  Python script location : $SCRIPT_DIR/STARAlign.py"
+echo "  Data location         : $BASE_DIR"
+echo "  Datasets              : $GSE_LIST"
+echo "  Threads               : $THREADS"
 echo "=========================================================="
 
-# Call the Python script to do the alignment logic
+# Change directory to where the Python script is located
+cd "$SCRIPT_DIR" || { echo "[ERROR] Cannot access $SCRIPT_DIR. Exiting."; exit 1; }
+
+# Call the Python script, explicitly passing the correct data directory
 python STARAlign.py \
     --base_dir "$BASE_DIR" \
     --gse_list $GSE_LIST \
