@@ -155,6 +155,9 @@ def main():
     parser.add_argument("--paired", action="store_true", help="If set, treat all runs as paired-end.")
     parser.add_argument("--skip_download", action="store_true", 
                         help="Skip SRA prefetch; only convert existing .sra to FASTQ.")
+    parser.add_argument('--max_size', 
+                        default='100GB', 
+                        help='Maximum allowed size for downloading SRA files (e.g., 100GB).')
     args = parser.parse_args()
 
     log_message(f"Arguments: base_dir={args.base_dir}, gse_list={args.gse_list}, "
