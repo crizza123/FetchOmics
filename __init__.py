@@ -11,14 +11,14 @@ converting, and aligning reads from GEO datasets.
 from .GeoDataset import GeoDataset
 from .SRRDownload import SRRDownload
 from .SRRConvert import SRRConvert
-from .STARAligner import STARAligner
+from .STARAlign import STARAlign
 from .utils import log_message, create_directory
 
 __all__ = [
     "GeoDataset",
     "SRRDownload",
     "SRRConvert",
-    "STARAligner",
+    "STARAlign",
     "log_message",
     "create_directory"
 ]
