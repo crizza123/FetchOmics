@@ -2,7 +2,7 @@
 #SBATCH --job-name=star_align
 #SBATCH --output=star_align_%j.out
 #SBATCH --error=star_align_%j.err
-#SBATCH --time=04:00:00
+#SBATCH --time=06:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
