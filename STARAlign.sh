@@ -19,7 +19,7 @@
 
 # Load modules
 module load Bioinformatics
-module load STAR
+module load star
 module load python/3.12.1    # Ensure Python module has necessary packages
 
 # Define directories explicitly
