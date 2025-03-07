@@ -27,7 +27,7 @@ SCRIPT_DIR="/nfs/turbo/umms-sihogan/crizza/FetchOmics"  # Location of STARAlign.
 BASE_DIR="/nfs/turbo/umms-sihogan/crizza/Data"          # Location of your datasets (FASTQ files)
 
 # List of datasets to process (update this if you add more datasets)
-GSE_LIST="GSE106973 GSE128003 GSE128074"
+GSE_LIST="GSE128003 GSE128074"
 
 # Number of threads (cpus) to use for STAR
 THREADS=$SLURM_CPUS_PER_TASK
