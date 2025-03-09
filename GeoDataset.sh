@@ -8,7 +8,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --account=sihogan0
+#SBATCH --account=sihogan1
 
 # Load required modules
 module load Bioinformatics
